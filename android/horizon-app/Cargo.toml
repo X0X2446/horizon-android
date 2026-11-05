@@ -1,0 +1,28 @@
+[package]
+name = "horizon-app"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+rust-version = "1.90"
+description = "Horizon's Android app: the wrapper crate that links the port to the game and provides android_main"
+publish = false
+
+# The wrapper is built by Gradle (cargo-ndk) for the Android target only.
+# It is NOT part of the main workspace: the game's dependency tree is enormous.
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+horizon-android = { path = "../../crates/horizon-android" }
+horizon-client = { path = "../../crates/horizon-client", default-features = false }
+horizon-client-input = { path = "../../crates/horizon-client-input" }
+
+[target.'cfg(target_os = "android")'.dependencies]
+android-activity = { version = "0.6.1", default-features = false, features = ["native-activity"] }
+jni = "0.21"
+log = "0.4"
+
+[features]
+default = []

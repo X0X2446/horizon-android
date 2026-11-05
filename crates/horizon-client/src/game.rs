@@ -257,6 +257,7 @@ mod ordered_tick;
 mod packs;
 mod pad;
 mod pad_menu;
+mod touch;
 mod paintings;
 mod pandas;
 mod particle_culling;
@@ -537,6 +538,14 @@ struct Options {
     session_file: Option<String>,
     /// `--session-stdin`: the session file's JSON comes on standard input instead.
     session_stdin: bool,
+    /// `--graphics-api`: the API the game renders with (`auto`, `vulkan`, `gles`).
+    graphics_api: Option<horizon_client::graphics::GraphicsApi>,
+    /// `--resolution-scale N`: percent of the window's size (the Android port's
+    /// resolution ratio; the desktop launcher passes 100).
+    resolution_scale: Option<u32>,
+    /// `--skip-integrity-check`: launch without verifying the prepared resources
+    /// (the Android port's skipGameIntegrityCheck).
+    skip_integrity_check: bool,
 }
 impl Options {
     /// The name to join servers with: the one given, else the offline name kept
@@ -556,7 +565,12 @@ impl Options {
     /// The command line, then what it asks of the process: the game folder, the account.
     /// A bad command line is a [`launch_api::UsageError`] (exit code 2, no crash report).
     fn read() -> Result<Option<Self>> {
-        let Some(mut o) = Self::parse(std::env::args().skip(1))
+        Self::read_from(std::env::args().skip(1))
+    }
+    /// The same read, from an explicit command line: the Android port's launcher
+    /// builds it from the compatibility settings and calls [`run_with_args`].
+    fn read_from(args: impl IntoIterator<Item = String>) -> Result<Option<Self>> {
+        let Some(mut o) = Self::parse(args.into_iter())
             .map_err(|e| launch_api::UsageError(e.to_string()))?
         else {
             return Ok(None);
@@ -609,6 +623,16 @@ impl Options {
             } else {
                 eprintln!("Quick play: there is no world {world} in saves/");
             }
+        }
+        // `--resolution-scale N`: the window starts at N percent of its size
+        // (the Android port's resolution ratio). Below 100% the surface is smaller
+        // and the system upscales it, so the game renders fewer pixels.
+        if let Some(scale) = o.resolution_scale {
+            let [w, h] = o.window_size;
+            o.window_size = [
+                ((w as u64) * scale as u64 / 100).max(320) as u32,
+                ((h as u64) * scale as u64 / 100).max(180) as u32,
+            ];
         }
         Ok(Some(o))
     }
@@ -664,6 +688,9 @@ impl Options {
             quick_play: None,
             session_file: std::env::var("HORIZON_SESSION_FILE").ok(),
             session_stdin: false,
+            graphics_api: None,
+            resolution_scale: None,
+            skip_integrity_check: false,
         };
         while let Some(arg) = args.next() {
             match arg.as_str() {
@@ -680,6 +707,7 @@ impl Options {
                 }
                 "--fullscreen" => o.fullscreen = true,
                 "--session-stdin" => o.session_stdin = true,
+                "--skip-integrity-check" => o.skip_integrity_check = true,
                 "--dedicated" => {
                     o.execution_role = execution_role::ExecutionRole::DedicatedServer;
                     o.dedicated = Some(args.by_ref().collect());
@@ -771,6 +799,14 @@ impl Options {
                             "--server" | "--quickPlayMultiplayer" => o.server = Some(value),
                             "--name" => o.player_name = Some(value),
                             "--session-file" => o.session_file = Some(value),
+                    "--graphics-api" => {
+                        o.graphics_api = value.parse().ok();
+                    }
+                    "--resolution-scale" => {
+                        if let Ok(scale) = value.parse::<u32>() {
+                            o.resolution_scale = Some(scale);
+                        }
+                    }
                             "--control-socket" => o.control = Some(value.into()),
                             "--time" => o.time = Some(value.parse()?),
                             "--weather" => o.weather = Some(value),
@@ -17304,6 +17340,11 @@ impl ApplicationHandler for Game<'_> {
         }
         // The Window constructor: created fullscreen when options.txt or --fullscreen says so.
         let fullscreen = self.settings.fullscreen || self.options.fullscreen;
+        // Android's window is the whole screen from birth: there is no fullscreen
+        // attribute to ask for (the port's game_full_screen setting is the launcher's
+        // immersive mode, not this).
+        #[cfg(target_os = "android")]
+        let fullscreen = false;
         let size = self.options.window_size.map(f64::from);
         self.fullscreen = horizon_client::window::FullscreenState::new(fullscreen);
         let attributes = Window::default_attributes()
@@ -17421,6 +17462,27 @@ impl Game<'_> {
             return;
         }
         follow_keymap(&mut event);
+        // The Android port's touch controller sees the pointer events (they are
+        // its touches); the game itself has no pointer handling, so the rest of
+        // the dispatch is unchanged.
+        if let WindowEvent::Pointer { event: pointer, .. } = &event {
+            if let Some((x, y)) = pointer.position {
+                let phase = match pointer.state {
+                    winit::event::PointerState::Pressed => Some(PointerPhase::Down),
+                    winit::event::PointerState::Moved => Some(PointerPhase::Move),
+                    winit::event::PointerState::Released => Some(PointerPhase::Up),
+                    _ => None,
+                };
+                if let Some(phase) = phase {
+                    self.forward_pointer(
+                        x as f32,
+                        y as f32,
+                        usize::from(pointer.id) as i32,
+                        phase,
+                    );
+                }
+            }
+        }
         // MacosUtil.setCtrlClickEmulatesRightClick: Control + left click is a right click.
         if let WindowEvent::MouseInput { state, button, .. } = &mut event
             && *button == MouseButton::Left
@@ -18901,7 +18963,7 @@ impl Game<'_> {
     /// save, world entry, the control socket, pads), then the next frame.
     pub(super) fn idle(&mut self, event_loop: &dyn EventLoopCtl) {
         // A splitscreen player's game has nothing to save: P1's shuts the process down.
-        if horizon_threads::stop_requests() > 0
+        if (horizon_threads::stop_requests() > 0 || quit_requested())
             && !self.options.split_guest
             && self.pending_save.as_ref().is_none_or(|save| !save.quit)
         {
@@ -18959,6 +19021,10 @@ impl Game<'_> {
             return;
         }
         horizon_client::spans::time("pads", || self.poll_pads(event_loop));
+        // The Android port's touch controller and gyroscope. A desktop build has
+        // no source installed and both are no-ops.
+        horizon_client::spans::time("touch", || self.poll_touch(event_loop));
+        horizon_client::spans::time("gyro", || self.poll_gyro());
         self.pause_if_inactive();
         if self.options.frames.is_some() && self.started.elapsed() > self.options.timeout {
             self.error = Some("frame-limited run timed out".into());
@@ -21337,6 +21403,10 @@ impl Loading {
         // The Window constructor: created fullscreen when options.txt or --fullscreen says so.
         let fullscreen =
             self.settings.fullscreen || self.options.as_ref().is_some_and(|o| o.fullscreen);
+        // Android's window is the whole screen from birth: there is no fullscreen
+        // attribute to ask for.
+        #[cfg(target_os = "android")]
+        let fullscreen = false;
         let size = self
             .options
             .as_ref()
@@ -21800,8 +21870,29 @@ fn run_loading(
 
 pub use launch_api::{UsageError, exit_code};
 
+/// The quit flag the Android port's JNI bridge sets (`nativeQuit`). A desktop
+/// build never requests it; the game's idle loop sees it like a stop signal.
+static QUIT_REQUESTED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// Ask the game to save and quit.
+pub fn request_quit() {
+    QUIT_REQUESTED.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Whether a quit was requested (the flag is consumed by the check).
+fn quit_requested() -> bool {
+    QUIT_REQUESTED.swap(false, std::sync::atomic::Ordering::Relaxed)
+}
+
 pub fn run_with() -> Result<()> {
-    let Some(mut options) = Options::read()? else {
+    run_with_args(std::env::args().skip(1).collect())
+}
+
+/// The same, from an explicit command line: the Android port's launcher builds it
+/// from the compatibility settings (`--graphics-api`, `--resolution-scale`, …).
+pub fn run_with_args(args: Vec<String>) -> Result<()> {
+    let Some(mut options) = Options::read_from(args)? else {
         return Ok(());
     };
     if options.execution_role == execution_role::ExecutionRole::DedicatedServer
@@ -21849,7 +21940,12 @@ pub fn run_with() -> Result<()> {
         horizon_client::spans::record_here(true);
     }
     let vanilla_root = options.resources.clone();
-    if let Some(error) = missing_resources(&vanilla_root) {
+    // `--skip-integrity-check`: launch anyway when the prepared resources are
+    // incomplete (the Android port's skipGameIntegrityCheck; the launcher still
+    // warns about it).
+    if !options.skip_integrity_check
+        && let Some(error) = missing_resources(&vanilla_root)
+    {
         // The game build started by hand (the release's zip), not by the
         // launcher: a window says where to get it. Scripts and servers get
         // the error.
@@ -21877,6 +21973,11 @@ pub fn run_with() -> Result<()> {
     mods::register_components(&vanilla_root)?;
     mods::register_standalone_models();
     let mut early_settings = Settings::load(&Game::options_path());
+    // `--graphics-api`: the compatibility profile's renderer choice (the Android
+    // port's graphicsApi setting; `auto` leaves the settings file's choice alone).
+    if let Some(api) = options.graphics_api {
+        early_settings.startup_api = api;
+    }
     // Minecraft.<init>: read the last start's flag, then mark this one as not
     // finished until onGameLoadFinished. A dedicated server has no options.txt.
     if options.execution_role.is_client() {

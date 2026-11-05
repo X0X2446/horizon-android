@@ -1,0 +1,10 @@
+[package]
+name = "android-activity"
+version = "0.6.1"
+edition = "2021"
+description = "STUB for host-build verification only. The real crate comes from crates.io on Android."
+
+[features]
+default = []
+native-activity = []
+game-activity = []
