@@ -16,6 +16,55 @@ pub fn main_with(mods: crate::mod_api::Mods) {
     horizon_client::telemetry::mark_start();
     horizon_client::spans::startup::init(std::time::Instant::now());
     let args: Vec<String> = std::env::args().skip(1).collect();
+    let started = startup(&args);
+    if let Err(error) = game::run_with_args(args) {
+        // A bad command line is the caller's mistake, not a crash: no report.
+        let usage = error.is::<game::UsageError>();
+        log::error!("Horizon: {error}");
+        logging::flush();
+        // The report's path is the last line on stderr (crash::SAVED_LINE).
+        if !started.help && !usage {
+            crash::report_error(&started.home, started.side, &*error);
+        }
+        // Started from Explorer, the console window closes with the game:
+        // keep the message on screen until it is read.
+        #[cfg(windows)]
+        if std::io::IsTerminal::is_terminal(&std::io::stdin()) {
+            eprintln!("Press Enter to close.");
+            let _ = std::io::stdin().read_line(&mut String::new());
+        }
+        std::process::exit(if usage {
+            game::exit_code::USAGE
+        } else {
+            game::exit_code::ERROR
+        });
+    }
+    logging::flush();
+}
+
+/// The Android port's entry (`horizon-android`): the same startup with an explicit
+/// command line, and the error handed back instead of exiting the process (the
+/// port's launcher wants to return to its own UI).
+pub fn run_on_android(args: Vec<String>) -> Result<()> {
+    if crate::mod_api::MODS.set(Default::default()).is_err() {
+        log::warn!("Trait mods already installed; ignoring the second list");
+    }
+    horizon_threads::configure_allocator();
+    horizon_client::telemetry::mark_start();
+    horizon_client::spans::startup::init(std::time::Instant::now());
+    startup(&args);
+    game::run_with_args(args)
+}
+
+/// What `startup` installed, for the crash report an error needs.
+struct Startup {
+    home: std::path::PathBuf,
+    side: &'static str,
+    help: bool,
+}
+
+/// Everything before the game starts: the log, the crash handler, the hooks.
+fn startup(args: &[String]) -> Startup {
     let game_args = args.iter().take_while(|a| *a != "--dedicated");
     let help = game_args
         .clone()
@@ -173,29 +222,7 @@ pub fn main_with(mods: crate::mod_api::Mods) {
         log::warn!("Native client hooks already installed; keeping the first callbacks");
     }
     raise_open_file_limit();
-    if let Err(error) = game::run_with() {
-        // A bad command line is the caller's mistake, not a crash: no report.
-        let usage = error.is::<game::UsageError>();
-        log::error!("Horizon: {error}");
-        logging::flush();
-        // The report's path is the last line on stderr (crash::SAVED_LINE).
-        if !help && !usage {
-            crash::report_error(&home, side, &*error);
-        }
-        // Started from Explorer, the console window closes with the game:
-        // keep the message on screen until it is read.
-        #[cfg(windows)]
-        if std::io::IsTerminal::is_terminal(&std::io::stdin()) {
-            eprintln!("Press Enter to close.");
-            let _ = std::io::stdin().read_line(&mut String::new());
-        }
-        std::process::exit(if usage {
-            game::exit_code::USAGE
-        } else {
-            game::exit_code::ERROR
-        });
-    }
-    logging::flush();
+    Startup { home, side, help }
 }
 
 /// The JVM raises its open-file limit to the hard limit as it starts

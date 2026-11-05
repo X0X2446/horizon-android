@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.horizon.android">
+
+    <!-- The game needs to read and write its files, access the network (multiplayer),
+         and use the gyroscope (optional). -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="18" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+
+    <!-- The gyroscope (optional: the gyroscope_control setting). -->
+    <uses-feature android:name="android.hardware.sensor.gyroscope" android:required="false" />
+
+    <application
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:theme="@style/Theme.Horizon"
+        android:hasCode="true">
+
+        <!-- The launcher: the settings screen, the world list, the play button. -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- The game: a NativeActivity subclass that writes the launch request and
+             starts the game. It is transparent over the launcher so the launcher stays
+             visible while the game starts. -->
+        <activity
+            android:name=".GameActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:theme="@style/Theme.Horizon.Game"
+            android:screenOrientation="landscape" />
+    </application>
+</manifest>

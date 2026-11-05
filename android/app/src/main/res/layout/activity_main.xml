@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/app_name"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="16dp" />
+
+        <!-- Graphics API -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Graphics API"
+                android:layout_weight="1" />
+            <Spinner
+                android:id="@+id/graphics_api"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+        </LinearLayout>
+
+        <!-- Resolution ratio -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Resolution"
+                android:layout_weight="1" />
+            <SeekBar
+                android:id="@+id/resolution_ratio"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:max="300" />
+        </LinearLayout>
+
+        <!-- RAM allocation -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="RAM (MB)"
+                android:layout_weight="1" />
+            <SeekBar
+                android:id="@+id/ram_allocation"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:max="8192" />
+        </LinearLayout>
+
+        <!-- Touch controls -->
+        <CheckBox
+            android:id="@+id/touch_controls"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Touch controls"
+            android:layout_marginBottom="4dp" />
+
+        <CheckBox
+            android:id="@+id/gesture_control"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Gesture control"
+            android:layout_marginBottom="4dp" />
+
+        <!-- Gyroscope -->
+        <CheckBox
+            android:id="@+id/gyroscope_control"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Gyroscope"
+            android:layout_marginBottom="4dp" />
+
+        <!-- Gamepad -->
+        <CheckBox
+            android:id="@+id/gamepad_control"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Gamepad"
+            android:layout_marginBottom="16dp" />
+
+        <!-- Settings JSON (the advanced view) -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Settings (JSON)"
+            android:textStyle="bold"
+            android:layout_marginBottom="4dp" />
+        <EditText
+            android:id="@+id/settings_text"
+            android:layout_width="match_parent"
+            android:layout_height="200dp"
+            android:gravity="top"
+            android:inputType="textMultiLine"
+            android:fontFamily="monospace"
+            android:textSize="10sp"
+            android:background="#f0f0f0" />
+
+        <!-- Play button -->
+        <Button
+            android:id="@+id/play_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Play"
+            android:textSize="18sp" />
+    </LinearLayout>
+</ScrollView>

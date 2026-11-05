@@ -240,8 +240,12 @@ impl GraphicsApi {
         ];
         const LINUX: [GraphicsApi; 3] =
             [GraphicsApi::Auto, GraphicsApi::Vulkan, GraphicsApi::OpenGl];
+        const ANDROID: [GraphicsApi; 3] =
+            [GraphicsApi::Auto, GraphicsApi::Vulkan, GraphicsApi::OpenGl];
         const MACOS: [GraphicsApi; 1] = [GraphicsApi::Auto];
-        if cfg!(windows) {
+        if cfg!(target_os = "android") {
+            &ANDROID
+        } else if cfg!(windows) {
             &WINDOWS
         } else if cfg!(target_os = "macos") {
             &MACOS

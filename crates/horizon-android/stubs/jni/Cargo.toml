@@ -1,0 +1,5 @@
+[package]
+name = "jni"
+version = "0.21.1"
+edition = "2021"
+description = "STUB for host-build verification only. The real crate comes from crates.io on Android."
